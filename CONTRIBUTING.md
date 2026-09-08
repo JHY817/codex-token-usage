@@ -23,14 +23,14 @@ npm run check
 维护者使用一个版本号作为唯一来源：
 
 ```bash
+git switch -c codex/release-0.2.0
 npm run release:prepare -- 0.2.0
 git add .
 git commit -m "release: v0.2.0"
-git tag v0.2.0
-git push origin main --follow-tags
+git push -u origin codex/release-0.2.0
 ```
 
-`v*` 标签会触发 GitHub Actions，自动测试、构建 Apple Silicon 与 Intel 安装包并创建 GitHub Release。稳定版必须预先配置完整的 Apple Developer ID 签名与公证凭据；缺少任一凭据时发布会失败，不会生成未签名的稳定包。手动运行工作流仍可生成仅供测试的未签名预览产物。
+提交并合并 Pull Request；确认 `main` 的 CI 通过后，再从最新 `main` 创建并推送同版本标签。`v*` 标签会触发 GitHub Actions，自动测试、构建 Apple Silicon 与 Intel 安装包并创建 GitHub Release。稳定版必须预先配置完整的 Apple Developer ID 签名与公证凭据；缺少任一凭据时发布会失败，不会生成未签名的稳定包。手动运行工作流仍可生成仅供测试的未签名预览产物。
 
 ## 数据与隐私
 

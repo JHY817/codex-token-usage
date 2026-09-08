@@ -111,30 +111,6 @@ npm run scheduler:uninstall
 node server/cli.mjs refresh all
 ```
 
-## 维护与发布
-
-日常更新：
-
-```bash
-git pull --rebase
-npm run check
-git add .
-git commit -m "feat: describe the change"
-git push
-```
-
-发布新版本：
-
-```bash
-npm run release:prepare -- 0.2.0
-git add .
-git commit -m "release: v0.2.0"
-git tag v0.2.0
-git push origin main --follow-tags
-```
-
-版本标签会触发 GitHub Actions，自动测试并生成 Apple Silicon、Intel 的 ZIP/DMG 和 SHA-256 校验文件。签名和公证配置见 [发布指南](docs/RELEASING.md)。
-
 ## 贡献、安全与许可
 
 提交修改前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按 [SECURITY.md](SECURITY.md) 私密报告。项目使用 [MIT License](LICENSE)，第三方图标声明见 [macos/THIRD_PARTY_NOTICES.md](macos/THIRD_PARTY_NOTICES.md)。
