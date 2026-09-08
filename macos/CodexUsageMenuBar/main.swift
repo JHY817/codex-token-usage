@@ -140,7 +140,7 @@ enum CodexIconCatalog {
     static func loadColorIcon(
         fileManager: FileManager = .default,
         iconLoader: (String) -> NSImage? = { NSWorkspace.shared.icon(forFile: $0) },
-        homeDirectory: String = NSHomeDirectory(),
+        homeDirectory: String = NSHomeDirectory()
     ) -> NSImage? {
         for path in officialIconCandidates(homeDirectory: homeDirectory) {
             guard fileManager.isReadableFile(atPath: path),
@@ -195,7 +195,7 @@ final class CodexUsageModel: ObservableObject {
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
-            queue: .main,
+            queue: .main
         ) { [weak self] _ in
             self?.stopServer()
         }
@@ -335,7 +335,7 @@ final class CodexUsageModel: ObservableObject {
         let applicationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
-            queue: .main,
+            queue: .main
         ) { [weak self] _ in
             self?.refreshAfterLifecycleEvent()
         }
@@ -344,7 +344,7 @@ final class CodexUsageModel: ObservableObject {
         let wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
-            queue: .main,
+            queue: .main
         ) { [weak self] _ in
             self?.refreshAfterLifecycleEvent()
         }
@@ -423,7 +423,7 @@ final class CodexUsageModel: ObservableObject {
         environment["PATH"] = Self.runtimePath(
             current: environment["PATH"],
             nodePath: nodePath,
-            codexPath: codexPath,
+            codexPath: codexPath
         )
         if let codexPath {
             environment["CODEX_BIN"] = codexPath
@@ -776,7 +776,7 @@ struct PopoverActionButtonStyle: ButtonStyle {
             .padding(.vertical, 7)
             .background(
                 backgroundColor(pressed: configuration.isPressed),
-                in: Capsule(style: .continuous),
+                in: Capsule(style: .continuous)
             )
             .overlay {
                 Capsule(style: .continuous)
@@ -889,7 +889,7 @@ struct QuotaPopoverView: View {
                     SummaryMetric(
                         title: "今日 credits",
                         value: Self.creditLabel(model.todayCredits, available: model.creditsAvailable),
-                        unavailableMessage: nil,
+                        unavailableMessage: nil
                     )
                     Divider()
                         .frame(height: 43)
@@ -897,7 +897,7 @@ struct QuotaPopoverView: View {
                 SummaryMetric(
                     title: "今日 Token",
                     value: Self.tokenLabel(model.today?.tokens),
-                    unavailableMessage: nil,
+                    unavailableMessage: nil
                 )
             }
             .padding(14)
@@ -929,7 +929,7 @@ struct QuotaPopoverView: View {
                 Button {
                     DashboardWindowPresenter.openFromPopover(
                         dismissPopover: { dismiss() },
-                        openWindow: { openWindow(id: DashboardWindowPresenter.sceneID) },
+                        openWindow: { openWindow(id: DashboardWindowPresenter.sceneID) }
                     )
                 } label: {
                     Text("打开详情")
@@ -1065,7 +1065,7 @@ struct DashboardWebView: NSViewRepresentable {
             })();
             """,
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: true,
+            forMainFrameOnly: true
         )
         configuration.userContentController.addUserScript(nativeWindowScript)
         let view = WKWebView(frame: .zero, configuration: configuration)
@@ -1133,7 +1133,7 @@ enum DashboardWindowPresenter {
 
     static func bringToFront(
         _ window: NSWindow,
-        activate: () -> Void = { NSApp.activate(ignoringOtherApps: true) },
+        activate: () -> Void = { NSApp.activate(ignoringOtherApps: true) }
     ) {
         if window.isMiniaturized { window.deminiaturize(nil) }
         activate()
@@ -1145,7 +1145,7 @@ enum DashboardWindowPresenter {
         openWindow: @escaping () -> Void,
         windows: @escaping () -> [NSWindow] = { NSApp.windows },
         activate: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
-        attempts: Int = 40,
+        attempts: Int = 40
     ) {
         openWindow()
         focusWhenAvailable(windows: windows, activate: activate, remaining: attempts)
@@ -1156,7 +1156,7 @@ enum DashboardWindowPresenter {
         openWindow: @escaping () -> Void,
         windows: @escaping () -> [NSWindow] = { NSApp.windows },
         activate: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
-        attempts: Int = 40,
+        attempts: Int = 40
     ) {
         // Capture the transient menu-bar window before dismissing SwiftUI's
         // environment. The detail window is identified explicitly so an
@@ -1170,14 +1170,14 @@ enum DashboardWindowPresenter {
             openWindow: openWindow,
             windows: windows,
             activate: activate,
-            attempts: attempts,
+            attempts: attempts
         )
     }
 
     private static func focusWhenAvailable(
         windows: @escaping () -> [NSWindow],
         activate: @escaping () -> Void,
-        remaining: Int,
+        remaining: Int
     ) {
         DispatchQueue.main.async {
             if let window = Self.window(in: windows()) {

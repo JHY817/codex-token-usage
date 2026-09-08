@@ -1,25 +1,25 @@
 {
   "name": "codex-token-usage",
-  "version": "0.1.2",
-  "description": "\u5728 Codex \u5185\u67e5\u770b\u6309\u6a21\u578b\u3001\u601d\u8003\u6863\u4f4d\u548c\u5bf9\u8bdd\u5f52\u56e0\u7684\u672c\u5730 Token \u4f7f\u7528\u6d1e\u5bdf\u3002",
+  "version": "0.1.3",
+  "description": "在 Codex 内查看按模型、思考档位和对话归因的本地 Token 使用洞察。",
   "author": {
-    "name": "\u6c5f\u5b87"
+    "name": "江宇"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Token Usage",
-    "shortDescription": "\u6309\u6a21\u578b\u3001\u6863\u4f4d\u548c\u5bf9\u8bdd\u5206\u6790\u672c\u5730 Token \u4f7f\u7528\u3002",
-    "longDescription": "\u8bfb\u53d6\u672c\u673a Codex \u4f1a\u8bdd\u4e8b\u4ef6\uff0c\u5c55\u793a\u6a21\u578b\u4e0e\u601d\u8003\u6863\u4f4d\u6784\u6210\u3001\u5bf9\u8bdd\u6392\u884c\u3001\u5de5\u5177\u8c03\u7528\u3001\u7f13\u5b58\u5360\u6bd4\u548c\u6bcf\u65e5\u5feb\u7167\u3002\u6240\u6709\u5206\u6790\u90fd\u5728\u672c\u673a\u5b8c\u6210\u3002",
-    "developerName": "\u6c5f\u5b87",
+    "shortDescription": "按模型、档位和对话分析本地 Token 使用。",
+    "longDescription": "读取本机 Codex 会话事件，展示模型与思考档位构成、对话排行、工具调用、缓存占比和每日快照。所有分析都在本机完成。",
+    "developerName": "江宇",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
       "Read"
     ],
     "defaultPrompt": [
-      "\u6253\u5f00\u6211\u7684 Codex \u4f7f\u7528\u6d1e\u5bdf\u770b\u677f\u3002",
-      "\u67e5\u770b\u4eca\u5929\u5404\u6a21\u578b\u548c\u601d\u8003\u6863\u4f4d\u7684 Token \u6d88\u8017\u3002",
-      "\u5206\u6790\u6700\u8fd1 7 \u5929\u6d88\u8017\u6700\u9ad8\u7684\u5bf9\u8bdd\u3002"
+      "打开我的 Codex 使用洞察看板。",
+      "查看今天各模型和思考档位的 Token 消耗。",
+      "分析最近 7 天消耗最高的对话。"
     ],
     "screenshots": [
       "./assets/dashboard-light.png"

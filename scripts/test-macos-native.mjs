@@ -99,6 +99,7 @@ assert.match(source, /window\.backgroundColor = \.windowBackgroundColor/);
 assert.match(source, /view\.layer\?\.backgroundColor = NSColor\.windowBackgroundColor\.cgColor/);
 assert.match(source, /backdrop-filter: none/);
 assert.match(source, /window\.isMovableByWindowBackground = true/);
+assert.doesNotMatch(source, /,\s*\)/, "Swift 5 source must not use trailing commas before closing parentheses");
 assert.match(source, /final class NativeWindowDragView: NSView/);
 assert.match(source, /window\?\.performDrag\(with: event\)/);
 assert.match(source, /struct NativeWindowDragRegion: NSViewRepresentable/);
