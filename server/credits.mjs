@@ -61,7 +61,7 @@ export function readThreadUsage(id, { spawnImpl = spawn, timeoutMs = 10_000, cod
     child.stderr.on("data", () => {});
     child.on("error", () => finish({ error: "无法连接 Codex App Server" }));
     child.on("close", () => finish({ error: "credits 连接已结束" }));
-    send({ method: "initialize", id: 1, params: { clientInfo: { name: "codex-token-usage", version: "0.1.0" } } });
+    send({ method: "initialize", id: 1, params: { clientInfo: { name: "codex-token-usage", version: "0.1.5" } } });
   });
 }
 

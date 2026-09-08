@@ -30,7 +30,7 @@ git tag v0.2.0
 git push origin main --follow-tags
 ```
 
-`v*` 标签会触发 GitHub Actions，自动测试、构建 Apple Silicon 与 Intel 安装包并创建 GitHub Release。
+`v*` 标签会触发 GitHub Actions，自动测试、构建 Apple Silicon 与 Intel 安装包并创建 GitHub Release。稳定版必须预先配置完整的 Apple Developer ID 签名与公证凭据；缺少任一凭据时发布会失败，不会生成未签名的稳定包。手动运行工作流仍可生成仅供测试的未签名预览产物。
 
 ## 数据与隐私
 

@@ -73,6 +73,40 @@ test("extracts batched cumulative conversation totals and normalizes invalid val
     },
   );
   assert.equal(dashboardUi.extractConversationUsageTotals({ totals: [] }), null);
+
+  assert.deepEqual(
+    dashboardUi.extractConversationUsageTotals({
+      mcp_tool_result: {
+        _meta: { totals: { "private-task": 789 } },
+        structuredContent: { conversationCount: 1, totalTokens: 789 },
+      },
+    }),
+    { "private-task": 789 },
+  );
+});
+
+test("hydrates private UI data from hidden tool-result metadata", () => {
+  const dashboard = {
+    totals: { tokens: 123 },
+    models: [],
+    conversations: [{ id: "private-task", title: "只在界面显示" }],
+  };
+  const envelope = {
+    status: "success",
+    mcp_tool_result: {
+      structuredContent: { summary: { totals: dashboard.totals } },
+      _meta: { dashboard },
+    },
+  };
+  assert.deepEqual(dashboardUi.getPrivateToolPayload(envelope), { dashboard });
+  assert.equal(
+    dashboardUi.extractConversationDetail({
+      mcp_tool_result: {
+        _meta: { detail: { models: [{ id: "astra", label: "Astra" }] } },
+      },
+    }).models[0].id,
+    "astra",
+  );
 });
 
 test("compresses long model lists into top five plus a summed other series", () => {
@@ -258,6 +292,18 @@ test("keeps credits null-aware and unions official-only detail models", () => {
     dashboardUi.buildConversationUsageRows(detail).map((row) => [row.id, row.todayCredits]),
     [["token-only", null], ["official-only", 3]],
   );
+
+  const privateDetail = dashboardUi.extractConversationDetail({
+    call_tool_result: {
+      _meta: {
+        detail: {
+          models: [{ id: "astra-low", label: "GPT-6 Astra · Low", todayTokens: 42 }],
+        },
+      },
+      structuredContent: { modelCount: 1 },
+    },
+  });
+  assert.equal(privateDetail.models[0].id, "astra-low");
 });
 
 test("task and model token values use ten-thousand units without hiding missing data", () => {

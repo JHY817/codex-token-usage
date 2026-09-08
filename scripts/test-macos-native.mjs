@@ -8,14 +8,16 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const sourcePath = path.join(projectRoot, "macos", "CodexUsageMenuBar", "main.swift");
 const buildPath = path.join(projectRoot, "scripts", "build-macos-app.mjs");
 const installPath = path.join(projectRoot, "scripts", "install-macos-app.mjs");
+const releaseInstallPath = path.join(projectRoot, "scripts", "install-release.sh");
 const assetPath = path.join(projectRoot, "macos", "CodexUsageMenuBar", "Resources", "codex-template.png");
 const appIconPath = path.join(projectRoot, "macos", "CodexUsageMenuBar", "Resources", "AppIcon-1024-v2.png");
 const noticePath = path.join(projectRoot, "macos", "THIRD_PARTY_NOTICES.md");
 
-const [source, build, install, asset, appIcon, notice] = await Promise.all([
+const [source, build, install, releaseInstall, asset, appIcon, notice] = await Promise.all([
   readFile(sourcePath, "utf8"),
   readFile(buildPath, "utf8"),
   readFile(installPath, "utf8"),
+  readFile(releaseInstallPath, "utf8"),
   readFile(assetPath),
   readFile(appIconPath),
   readFile(noticePath, "utf8"),
@@ -82,6 +84,11 @@ assert.match(source, /CODEX_USAGE_QA_OPEN_DASHBOARD/);
 assert.match(source, /attempts: Int = 40/);
 assert.match(source, /model\.refresh\(force: true\)/);
 assert.match(source, /scheduledTimer\(withTimeInterval: 300, repeats: true\)/);
+assert.match(source, /scheduledTimer[\s\S]*self\?\.refresh\(force: true\)/);
+assert.match(source, /\/Applications\/ChatGPT\.app\/Contents\/Resources\/codex/);
+assert.match(source, /\/Applications\/Codex\.app\/Contents\/Resources\/codex/);
+assert.match(source, /--install-ready-file/);
+assert.match(source, /CODEX_USAGE_INSTALL_READY_FILE/);
 assert.match(source, /private var quotaRetryTimer: Timer\?/);
 assert.match(source, /quotaRetryDelays: \[TimeInterval\] = \[5, 10, 20, 30, 60\]/);
 assert.match(source, /if self\.quota\?\.available != true, let unavailable = payload\.quota/);
@@ -123,6 +130,13 @@ assert.match(install, /await stopRunningApp\(\)/);
 assert.match(install, /rm\(destination, \{ recursive: true, force: true \}\)/);
 assert.match(install, /lsregister/);
 assert.match(install, /\["-f", destination\]/);
+assert.match(releaseInstall, /CODEX_USAGE_RELEASE_BASE_URL/);
+assert.match(releaseInstall, /CODEX_USAGE_DESTINATION_DIR/);
+assert.match(releaseInstall, /--install-ready-file/);
+assert.match(releaseInstall, /api\/status\?refresh=1/);
+assert.match(releaseInstall, /rollback_install/);
+assert.match(releaseInstall, /destination_app_pids/);
+assert.match(releaseInstall, /open -n "\$DESTINATION_APP"/);
 assert.match(build, /THIRD_PARTY_NOTICES\.md/);
 assert.match(notice, /MIT License/);
 assert.match(notice, /Copyright \(c\) 2026 Guomeiqing/);

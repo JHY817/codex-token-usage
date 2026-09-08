@@ -5,18 +5,24 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const readJson = async (file) => JSON.parse(await readFile(path.join(root, file), "utf8"));
-const [pkg, manifest, mcp] = await Promise.all([
+const [pkg, manifest, mcp, serverEntry] = await Promise.all([
   readJson("package.json"),
   readJson(".codex-plugin/plugin.json"),
   readJson(".mcp.json"),
+  readFile(path.join(root, "server/index.mjs"), "utf8"),
 ]);
 
 assert.equal(pkg.name, "codex-token-usage");
 assert.match(pkg.version, /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
 assert.equal(manifest.name, pkg.name);
 assert.equal(manifest.version, pkg.version);
+assert.equal(manifest.author?.name, "鸿宇");
 assert.equal(manifest.interface?.displayName, "Codex Token Usage");
+assert.equal(manifest.interface?.developerName, "鸿宇");
 assert.equal(mcp.mcpServers?.["codex-token-usage"]?.command, "node");
+assert.match(serverEntry, /_meta: \{ dashboard \}/);
+assert.match(serverEntry, /visibility: \["app"\]/);
+assert.doesNotMatch(serverEntry, /structuredContent: \{ dashboard \}/);
 
 for (const file of [
   "README.md",

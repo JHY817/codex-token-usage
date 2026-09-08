@@ -7,7 +7,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_CLIENT_INFO = {
   name: "codex-token-usage",
   title: "Codex Token Usage",
-  version: "0.1.0",
+  version: "0.1.5",
 };
 
 function finiteNumber(value) {

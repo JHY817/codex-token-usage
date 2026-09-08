@@ -9,7 +9,7 @@ case "$(uname -m)" in
 esac
 
 ASSET="Codex-Token-Usage-macOS-${RELEASE_ARCH}.zip"
-BASE_URL="https://github.com/${REPOSITORY}/releases/latest/download"
+BASE_URL="${CODEX_USAGE_RELEASE_BASE_URL:-https://github.com/${REPOSITORY}/releases/latest/download}"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT INT TERM
 
@@ -26,19 +26,85 @@ ditto -x -k "$WORK_DIR/$ASSET" "$WORK_DIR/unpacked"
 SOURCE_APP="$WORK_DIR/unpacked/Codex Token Usage.app"
 test -d "$SOURCE_APP" || { echo "App bundle missing from release" >&2; exit 1; }
 
-DESTINATION_DIR="$HOME/Applications"
+DESTINATION_DIR="${CODEX_USAGE_DESTINATION_DIR:-$HOME/Applications}"
+mkdir -p "$DESTINATION_DIR"
+DESTINATION_DIR="$(cd "$DESTINATION_DIR" && pwd -P)"
 DESTINATION_APP="$DESTINATION_DIR/Codex Token Usage.app"
 BACKUP_APP="$WORK_DIR/previous-Codex-Token-Usage.app"
-mkdir -p "$DESTINATION_DIR"
-pkill -TERM -x CodexUsageMenuBar 2>/dev/null || true
+READY_FILE="$WORK_DIR/install-ready"
+
+destination_app_pids() {
+  ps -axo pid=,command= | awk -v executable="$DESTINATION_APP/Contents/MacOS/CodexUsageMenuBar" '
+    {
+      pid = $1
+      $1 = ""
+      sub(/^ /, "", $0)
+      if ($0 == executable || index($0, executable " ") == 1) print pid
+    }
+  '
+}
+
+stop_destination_app() {
+  PIDS="$(destination_app_pids)"
+  [ -z "$PIDS" ] || kill -TERM $PIDS 2>/dev/null || true
+}
+
+rollback_install() {
+  stop_destination_app
+  rm -rf "$DESTINATION_APP"
+  if [ -e "$BACKUP_APP" ]; then
+    mv "$BACKUP_APP" "$DESTINATION_APP"
+    open -n "$DESTINATION_APP" >/dev/null 2>&1 || true
+  fi
+}
+
+stop_destination_app
+WAIT_COUNT=0
+while [ -n "$(destination_app_pids)" ] && [ "$WAIT_COUNT" -lt 40 ]; do
+  sleep 0.25
+  WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+if [ -n "$(destination_app_pids)" ]; then
+  echo "Existing Codex Token Usage process did not stop" >&2
+  exit 1
+fi
 if [ -e "$DESTINATION_APP" ]; then
   test -d "$DESTINATION_APP/Contents" || { echo "Existing destination is not an app bundle" >&2; exit 1; }
   mv "$DESTINATION_APP" "$BACKUP_APP"
 fi
 if ! ditto "$SOURCE_APP" "$DESTINATION_APP"; then
-  rm -rf "$DESTINATION_APP"
-  [ ! -e "$BACKUP_APP" ] || mv "$BACKUP_APP" "$DESTINATION_APP"
+  rollback_install
   exit 1
 fi
-open "$DESTINATION_APP"
+if ! open -n "$DESTINATION_APP" --args --install-ready-file "$READY_FILE"; then
+  echo "Unable to launch the installed app" >&2
+  rollback_install
+  exit 1
+fi
+
+WAIT_COUNT=0
+while [ ! -s "$READY_FILE" ] && [ "$WAIT_COUNT" -lt 80 ]; do
+  sleep 0.25
+  WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+if [ ! -s "$READY_FILE" ]; then
+  echo "Installed app did not start its local data service" >&2
+  rollback_install
+  exit 1
+fi
+
+SERVER_URL="$(sed -n '1p' "$READY_FILE")"
+case "$SERVER_URL" in
+  http://127.0.0.1:*) ;;
+  *)
+    echo "Installed app returned an invalid local service address" >&2
+    rollback_install
+    exit 1
+    ;;
+esac
+if ! curl -fsS --retry 2 --max-time 60 "$SERVER_URL/api/status?refresh=1" >/dev/null; then
+  echo "Installed app could not read local Codex data; previous version restored" >&2
+  rollback_install
+  exit 1
+fi
 echo "Codex Token Usage installed in $DESTINATION_APP"

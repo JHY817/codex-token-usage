@@ -1,6 +1,6 @@
 {
   "name": "codex-token-usage",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -10,6 +10,7 @@
     "start": "node server/index.mjs",
     "desktop:start": "node server/http.mjs",
     "refresh": "node server/cli.mjs refresh",
+    "demo:data": "node scripts/generate-demo-data.mjs",
     "native:build": "npm run build && node scripts/build-macos-app.mjs",
     "native:install": "npm run native:build && node scripts/install-macos-app.mjs",
     "native:install:launch": "npm run native:build && node scripts/install-macos-app.mjs --launch",

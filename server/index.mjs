@@ -38,8 +38,32 @@ function conciseSummary(dashboard) {
   return `${dashboard.periodLabel}本地可归因 Token 为 ${dashboard.totals.tokens.toLocaleString("zh-CN")}，${dashboard.totals.conversations} 个对话，${dashboard.totals.toolCalls} 次工具调用。${modelSummary}`;
 }
 
+function safeDashboardSummary(dashboard) {
+  return {
+    range: dashboard.range,
+    periodLabel: dashboard.periodLabel,
+    generatedAt: dashboard.generatedAt,
+    totals: dashboard.totals,
+    models: dashboard.models.map(({ id, label, tokens, share }) => ({ id, label, tokens, share })),
+    caveat: "local attribution, not billing",
+  };
+}
+
+function privateDashboardResult(dashboard, text) {
+  return {
+    structuredContent: { summary: safeDashboardSummary(dashboard) },
+    content: [{ type: "text", text }],
+    _meta: { dashboard },
+  };
+}
+
+const APP_ONLY_META = {
+  ui: { visibility: ["app"] },
+  "openai/visibility": "private",
+};
+
 const server = new McpServer(
-  { name: "codex-token-usage", version: "0.1.0" },
+  { name: "codex-token-usage", version: "0.1.5" },
   {
     instructions:
       "This local-only server reads Codex session logs for usage attribution. Never describe its totals as billing data or calculate USD cost. Use open_usage_dashboard for visual inspection and get_usage_summary for short questions. The all range covers currently retained local session logs and is rebuilt from a persistent aggregate index.",
@@ -94,14 +118,7 @@ server.registerTool(
   async ({ range }) => {
     const dashboard = await service.getDashboard(range);
     return {
-      structuredContent: {
-        range: dashboard.range,
-        periodLabel: dashboard.periodLabel,
-        generatedAt: dashboard.generatedAt,
-        totals: dashboard.totals,
-        models: dashboard.models.map(({ id, label, tokens, share }) => ({ id, label, tokens, share })),
-        caveat: "local attribution, not billing",
-      },
+      structuredContent: safeDashboardSummary(dashboard),
       content: [{ type: "text", text: conciseSummary(dashboard) }],
     };
   },
@@ -113,14 +130,12 @@ server.registerTool(
     title: "读取 Codex 使用快照",
     description: "读取插件已保存的本地使用快照，供看板在切换今天、7 天、30 天和累计时使用。累计范围按本地索引增量重建。",
     inputSchema: { range: RANGE_SCHEMA },
+    _meta: APP_ONLY_META,
     annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
   },
   async ({ range }) => {
     const dashboard = await service.getDashboard(range);
-    return {
-      structuredContent: { dashboard },
-      content: [{ type: "text", text: conciseSummary(dashboard) }],
-    };
+    return privateDashboardResult(dashboard, conciseSummary(dashboard));
   },
 );
 
@@ -130,14 +145,12 @@ server.registerTool(
     title: "刷新 Codex 使用快照",
     description: "重新扫描本机 Codex 会话事件并覆盖当前周期快照；用于看板中的手动刷新。累计范围只重解析新增或发生变化的 rollout 文件。",
     inputSchema: { range: RANGE_SCHEMA },
+    _meta: APP_ONLY_META,
     annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
   },
   async ({ range }) => {
     const dashboard = await service.refreshDashboard(range);
-    return {
-      structuredContent: { dashboard },
-      content: [{ type: "text", text: `已刷新。${conciseSummary(dashboard)}` }],
-    };
+    return privateDashboardResult(dashboard, `已刷新。${conciseSummary(dashboard)}`);
   },
 );
 
@@ -147,6 +160,7 @@ server.registerTool(
     title: "查询任务 Token 明细",
     description: "查询一个本地任务按模型与思考档位拆分的今日 Token 与本机累计 Token 对比。累计范围覆盖当前仍保留的本机会话日志，不代表官方账单。",
     inputSchema: { conversationId: CONVERSATION_ID_SCHEMA },
+    _meta: APP_ONLY_META,
     annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
   },
   async ({ conversationId }) => {
@@ -156,11 +170,17 @@ server.registerTool(
       .map((model) => `${model.label}: 今日 ${model.todayTokens.toLocaleString("zh-CN")}，累计 ${model.cumulativeTokens.toLocaleString("zh-CN")}`)
       .join("；");
     return {
-      structuredContent: { detail },
+      structuredContent: {
+        todayTokens: detail.todayTokens,
+        cumulativeTokens: detail.cumulativeTokens,
+        modelCount: detail.models.length,
+        caveat: "local attribution, not billing",
+      },
       content: [{
         type: "text",
-        text: `${detail.conversation.title}：今日 ${detail.todayTokens.toLocaleString("zh-CN")} Token，累计 ${detail.cumulativeTokens.toLocaleString("zh-CN")} Token。${modelSummary}`,
+        text: `该任务今日 ${detail.todayTokens.toLocaleString("zh-CN")} Token，累计 ${detail.cumulativeTokens.toLocaleString("zh-CN")} Token。${modelSummary}`,
       }],
+      _meta: { detail },
     };
   },
 );
@@ -171,16 +191,20 @@ server.registerTool(
     title: "查询任务累计 Token",
     description: "批量查询最多 20 个本地任务的累计 Token。累计范围覆盖当前仍保留的本机会话日志，不代表官方账单；未知任务返回 0。",
     inputSchema: { conversationIds: CONVERSATION_IDS_SCHEMA },
+    _meta: APP_ONLY_META,
     annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
   },
   async ({ conversationIds }) => {
     const { totals, cumulativeBreakdowns } = await service.getConversationUsageTotals(conversationIds, new Date(), { includeBreakdowns: true });
-    const summary = Object.entries(totals)
-      .map(([id, tokens]) => `${id}: ${tokens.toLocaleString("zh-CN")}`)
-      .join("；");
+    const totalTokens = Object.values(totals).reduce((sum, tokens) => sum + tokens, 0);
     return {
-      structuredContent: { totals, cumulativeBreakdowns },
-      content: [{ type: "text", text: `已查询 ${Object.keys(totals).length} 个任务的累计 Token。${summary}` }],
+      structuredContent: {
+        conversationCount: Object.keys(totals).length,
+        totalTokens,
+        caveat: "local attribution, not billing",
+      },
+      content: [{ type: "text", text: `已查询 ${Object.keys(totals).length} 个任务的累计 Token。` }],
+      _meta: { totals, cumulativeBreakdowns },
     };
   },
 );
@@ -192,7 +216,7 @@ server.registerTool(
     description: "打开交互式全屏使用看板，展示模型 × 思考档位、趋势和对话分析。",
     inputSchema: { range: RANGE_SCHEMA },
     _meta: {
-      ui: { resourceUri: TEMPLATE_URI },
+      ui: { resourceUri: TEMPLATE_URI, visibility: ["model", "app"] },
       "openai/outputTemplate": TEMPLATE_URI,
       "openai/toolInvocation/invoking": "正在读取本地使用快照…",
       "openai/toolInvocation/invoked": "使用洞察已就绪。",
@@ -201,10 +225,7 @@ server.registerTool(
   },
   async ({ range }) => {
     const dashboard = await service.getDashboard(range);
-    return {
-      structuredContent: { dashboard },
-      content: [{ type: "text", text: conciseSummary(dashboard) }],
-    };
+    return privateDashboardResult(dashboard, conciseSummary(dashboard));
   },
 );
 

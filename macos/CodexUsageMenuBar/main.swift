@@ -415,6 +415,9 @@ final class CodexUsageModel: ObservableObject {
         environment["CODEX_USAGE_UI_ROOT"] = uiRoot.path
         environment["CODEX_USAGE_PORT"] = "0"
         environment["CODEX_USAGE_PARENT_PID"] = String(ProcessInfo.processInfo.processIdentifier)
+        if let readyFile = Self.installReadyFile() {
+            environment["CODEX_USAGE_INSTALL_READY_FILE"] = readyFile
+        }
         // GUI-launched apps do not inherit the interactive shell's PATH. The
         // Codex launcher is a `#!/usr/bin/env node` script, so an absolute
         // CODEX_BIN alone is not enough: its Node directory must also be on
@@ -459,7 +462,7 @@ final class CodexUsageModel: ObservableObject {
             statusMessage = "正在启动本地服务…"
             refreshTimer?.invalidate()
             refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-                self?.refresh()
+                self?.refresh(force: true)
             }
         } catch {
             statusMessage = "无法启动本地服务"
@@ -509,10 +512,24 @@ final class CodexUsageModel: ObservableObject {
             "/usr/local/bin/codex",
             "\(home)/.local/bin/codex",
             "\(home)/.cargo/bin/codex",
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
+            "\(home)/Applications/ChatGPT.app/Contents/Resources/codex",
+            "/Applications/Codex.app/Contents/Resources/codex",
+            "\(home)/Applications/Codex.app/Contents/Resources/codex",
             "/opt/local/bin/codex",
             "/usr/bin/codex",
         ]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    private static func installReadyFile() -> String? {
+        let arguments = CommandLine.arguments
+        guard let index = arguments.firstIndex(of: "--install-ready-file"),
+              arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        let value = arguments[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     private static func runtimePath(current: String?, nodePath: String, codexPath: String?) -> String {

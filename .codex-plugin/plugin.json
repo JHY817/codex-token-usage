@@ -1,16 +1,16 @@
 {
   "name": "codex-token-usage",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "在 Codex 内查看按模型、思考档位和对话归因的本地 Token 使用洞察。",
   "author": {
-    "name": "江宇"
+    "name": "鸿宇"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Token Usage",
     "shortDescription": "按模型、档位和对话分析本地 Token 使用。",
     "longDescription": "读取本机 Codex 会话事件，展示模型与思考档位构成、对话排行、工具调用、缓存占比和每日快照。所有分析都在本机完成。",
-    "developerName": "江宇",
+    "developerName": "鸿宇",
     "category": "Productivity",
     "capabilities": [
       "Interactive",

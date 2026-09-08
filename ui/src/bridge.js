@@ -1,8 +1,43 @@
 let requestId = 1;
 const pending = new Map();
 
+function objectValue(value) {
+  return value && typeof value === "object" ? value : null;
+}
+
+export function getPrivateToolPayload(value) {
+  const queue = [objectValue(value)].filter(Boolean);
+  const seen = new Set();
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+    const meta = objectValue(current._meta);
+    if (meta && (
+      meta.dashboard
+      || meta.detail
+      || meta.totals
+      || meta.cumulativeBreakdowns
+      || meta.officialUsage
+      || meta.quota
+    )) return meta;
+    for (const key of [
+      "result",
+      "params",
+      "call_tool_result",
+      "mcp_tool_result",
+      "toolResponseMetadata",
+      "_meta",
+    ]) {
+      const nested = objectValue(current[key]);
+      if (nested) queue.push(nested);
+    }
+  }
+  return null;
+}
+
 function isHostResult(value) {
-  return value && typeof value === "object" && (value.structuredContent || value.content || value.dashboard);
+  return value && typeof value === "object" && (value.structuredContent || value.content || value.dashboard || value._meta);
 }
 
 async function callLocalPreview(name, args) {
@@ -63,6 +98,8 @@ async function callLocalPreview(name, args) {
 }
 
 export function getInitialDashboard() {
+  const privatePayload = getPrivateToolPayload(window.openai?.toolResponseMetadata);
+  if (privatePayload?.dashboard) return privatePayload.dashboard;
   const value = window.openai?.toolOutput;
   if (!value) return null;
   return value.dashboard ?? value.structuredContent?.dashboard ?? value.structuredContent ?? value;

@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -528,6 +528,14 @@ export async function startUsageHttpServer(options = {}) {
 const isEntryPoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isEntryPoint) {
   const app = await startUsageHttpServer();
+  const readyFile = process.env.CODEX_USAGE_INSTALL_READY_FILE?.trim();
+  if (readyFile) {
+    try {
+      await writeFile(readyFile, `${app.url}\n`, { encoding: "utf8", mode: 0o600 });
+    } catch (error) {
+      process.stderr.write(`Failed to write install readiness file: ${errorMessage(error)}\n`);
+    }
+  }
   process.stdout.write(`CODEX_USAGE_SERVER_READY ${JSON.stringify({ url: app.url, port: app.port })}\n`);
   let shuttingDown = false;
   const shutdown = async () => {

@@ -9,7 +9,7 @@
 - 每个模型和任务的缓存输入占比
 - 手动刷新与每天 23:59 的本地日快照
 
-最终交付形态是安装到 Codex 的个人插件。插件由本地 MCP 服务提供数据和交互式 UI，不依赖 OpenAI API Key，也不会把会话内容上传到外部服务。
+项目提供两种本地形态：可独立安装的 macOS 菜单栏 App，以及供 Codex 加载的个人插件源码。两者共用同一套本地统计逻辑，不依赖 OpenAI API Key，也不会把会话内容上传到外部服务。
 
 ![Codex Token Usage dashboard](assets/dashboard-light.png)
 
@@ -21,14 +21,14 @@
 curl -fsSL https://raw.githubusercontent.com/JHY817/codex-token-usage/main/scripts/install-release.sh | sh
 ```
 
-安装脚本会自动识别 Apple Silicon 或 Intel，校验下载文件的 SHA-256，并安装到 `~/Applications/Codex Token Usage.app`。也可以打开 [最新版本](https://github.com/JHY817/codex-token-usage/releases/latest)，下载对应的 DMG 后拖入 Applications：
+安装脚本会自动识别 Apple Silicon 或 Intel，校验下载文件的 SHA-256，并安装到 `~/Applications/Codex Token Usage.app`。安装后会检查本地服务和数据接口；升级失败时会恢复原版本。也可以打开 [最新版本](https://github.com/JHY817/codex-token-usage/releases/latest)，下载对应的 DMG 后拖入 Applications：
 
 - Apple Silicon：`Codex-Token-Usage-macOS-arm64.dmg`
 - Intel：`Codex-Token-Usage-macOS-x64.dmg`
 
-GitHub Release 已内置 Node.js 运行时，使用者不需要另行安装 Node.js。需要 macOS 13+，并且本机已经使用过 Codex。官方剩余额度依赖本机可执行的 `codex` 命令；没有该命令时，本地 Token 看板仍可使用。
+GitHub Release 已内置 Node.js 运行时，使用者不需要另行安装 Node.js。需要 macOS 13+，并且本机已经使用过 Codex。应用会自动查找常见安装位置以及 ChatGPT/Codex App 内置的 `codex` 命令；仍未找到时，本地 Token 看板可用，但官方剩余额度不可用。
 
-> 自动发布流程支持 Apple Developer 签名和公证。仓库未配置签名密钥时会发布未签名预览包，浏览器下载后 macOS 可能要求在“系统设置 → 隐私与安全性”中确认打开。
+> 当前公开的 v0.1.4 安装包尚未使用 Apple Developer ID 签名和公证，首次打开可能需要在“系统设置 → 隐私与安全性”中确认。后续稳定版发布流程已改为强制签名和公证；缺少凭据时只允许手动构建预览产物，不会创建稳定 Release。
 
 ## 数据口径
 
@@ -48,7 +48,9 @@ GitHub Release 已内置 Node.js 运行时，使用者不需要另行安装 Node
 - `本地快照`：读取同一统计周期已保存的快照
 - `数据读取失败`：真实数据不可用；不会自动回退成演示数据
 
-插件介绍中的截图仅用于展示界面样式，不代表当前账户数据。
+插件介绍中的截图由合成会话生成，仅用于展示界面样式，不代表任何真实账户数据。
+
+完整的任务标题、项目名和会话明细只用于本地界面。Codex 插件工具返回给模型的内容仅包含匿名汇总，界面明细通过 MCP 结果的私有 `_meta` 传递。
 
 ## 从源码开发
 

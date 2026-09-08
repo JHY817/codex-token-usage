@@ -11,7 +11,13 @@ import {
   MagnifyingGlass,
   X,
 } from "@phosphor-icons/react";
-import { callTool, getInitialDashboard, subscribeToToolResults } from "./bridge.js";
+import {
+  callTool,
+  getInitialDashboard,
+  getPrivateToolPayload,
+  subscribeToToolResults,
+} from "./bridge.js";
+export { getPrivateToolPayload } from "./bridge.js";
 import { createRangeRefreshGate, dashboardNeedsRefresh } from "./refresh-policy.js";
 
 export const RANGE_OPTIONS = [
@@ -170,7 +176,12 @@ function sourceLabel(dataSource) {
 }
 
 function extractDashboard(result) {
-  const candidate = result?.structuredContent?.dashboard ?? result?.structuredContent ?? result?.dashboard ?? result;
+  const privatePayload = getPrivateToolPayload(result);
+  const candidate = privatePayload?.dashboard
+    ?? result?.structuredContent?.dashboard
+    ?? result?.structuredContent
+    ?? result?.dashboard
+    ?? result;
   if (!candidate || !candidate.totals || !Array.isArray(candidate.models)) return null;
   return candidate;
 }
@@ -240,7 +251,8 @@ export function normalizeOfficialUsage(value, range = "today") {
 }
 
 export function extractOfficialUsageSummary(result, range = "today") {
-  const candidate = result?.structuredContent ?? result;
+  const privatePayload = getPrivateToolPayload(result);
+  const candidate = privatePayload ?? result?.structuredContent ?? result;
   if (!candidate || typeof candidate !== "object") return null;
   const officialUsage = candidate.officialUsage ?? result?.officialUsage;
   const quota = candidate.quota ?? result?.quota ?? null;
@@ -320,7 +332,9 @@ export function buildCreditSeries(officialUsage) {
 }
 
 export function extractConversationDetail(result) {
-  const candidate = result?.structuredContent?.detail
+  const privatePayload = getPrivateToolPayload(result);
+  const candidate = privatePayload?.detail
+    ?? result?.structuredContent?.detail
     ?? result?.structuredContent
     ?? result?.detail
     ?? result;
@@ -329,7 +343,9 @@ export function extractConversationDetail(result) {
 }
 
 export function extractConversationUsageTotals(result) {
-  const candidate = result?.structuredContent?.totals
+  const privatePayload = getPrivateToolPayload(result);
+  const candidate = privatePayload?.totals
+    ?? result?.structuredContent?.totals
     ?? result?.totals
     ?? result?.structuredContent
     ?? result;
@@ -353,7 +369,10 @@ export function cacheRateLabel(breakdown) {
 }
 
 export function extractConversationCacheBreakdowns(result) {
-  const value = result?.structuredContent?.cumulativeBreakdowns ?? result?.cumulativeBreakdowns;
+  const privatePayload = getPrivateToolPayload(result);
+  const value = privatePayload?.cumulativeBreakdowns
+    ?? result?.structuredContent?.cumulativeBreakdowns
+    ?? result?.cumulativeBreakdowns;
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
