@@ -222,7 +222,12 @@ test("uses cwd basename and verified update_plan steps for a task", async () => 
   assert.equal(task.progress.label, "1/3 步");
   assert.equal(task.status, "1/3 步");
   assert.equal(task.updatedAt, "2026-08-28T00:00:05.000Z");
-  assert.equal(task.updatedAtLabel, "08:00");
+  const expectedLocalTime = new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date("2026-08-28T00:00:05.000Z"));
+  assert.equal(task.updatedAtLabel, expectedLocalTime);
 });
 
 test("accepts a direct custom_tool_call update_plan but ignores exec source text", () => {

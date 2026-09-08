@@ -233,7 +233,6 @@ export function readQuota({
       resolve(value);
     };
     const timer = setTimeout(() => finish(unavailable("额度读取超时", fetchedAt)), Math.max(100, timeoutMs));
-    timer.unref?.();
 
     try {
       child = spawnImpl(spec.command, spec.args, {
