@@ -63,8 +63,14 @@ server_process_pids() {
 discover_server_url() {
   for PID in $(server_process_pids); do
     URL="$(lsof -Pan -p "$PID" -iTCP -sTCP:LISTEN -n 2>/dev/null | awk '/127\.0\.0\.1:[0-9]+ \(LISTEN\)/ { match($0, /127\.0\.0\.1:[0-9]+/); print "http://" substr($0, RSTART, RLENGTH); exit }')"
-    [ -n "$URL" ] && { printf '%s\n' "$URL"; return 0; }
+    if [ -n "$URL" ]; then
+      printf '%s\n' "$URL"
+      return 0
+    fi
   done
+  # A freshly launched app can have a matching process before Node has bound
+  # its loopback listener. Keep the polling loop alive under `set -e`.
+  return 0
 }
 
 rollback_install() {
@@ -107,7 +113,7 @@ while [ -z "$SERVER_URL" ] && [ "$WAIT_COUNT" -lt 80 ]; do
     SERVER_URL="$(sed -n '1p' "$READY_FILE")"
   fi
   if [ -z "$SERVER_URL" ]; then
-    SERVER_URL="$(discover_server_url)"
+    SERVER_URL="$(discover_server_url || true)"
   fi
   [ -n "$SERVER_URL" ] || sleep 0.25
   WAIT_COUNT=$((WAIT_COUNT + 1))
@@ -125,7 +131,7 @@ case "$SERVER_URL" in
     exit 1
     ;;
 esac
-if ! curl -fsS --retry 2 --max-time 60 "$SERVER_URL/api/status?refresh=1" >/dev/null; then
+if ! curl -fsS --retry 10 --retry-delay 1 --retry-connrefused --max-time 60 "$SERVER_URL/api/status?refresh=1" >/dev/null; then
   echo "Installed app could not read local Codex data; previous version restored" >&2
   rollback_install
   exit 1
