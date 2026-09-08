@@ -9,11 +9,10 @@
 ```bash
 npm install
 npm --prefix ui install
-npm test
-npm run build
+npm run check
 ```
 
-提交代码前请运行：
+`npm run check` 会从干净目录构建 UI、执行服务端、前端与原生壳测试，并生成 MCP 前端包。提交代码前也运行同一命令：
 
 ```bash
 npm run check

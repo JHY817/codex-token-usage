@@ -19,7 +19,7 @@
     "test:native": "node scripts/test-macos-native.mjs",
     "test": "node --test server/test/*.test.mjs && npm --prefix ui run test:sites && npm run test:native",
     "validate": "node scripts/validate-project.mjs",
-    "check": "npm run validate && npm test && npm run build",
+    "check": "npm run validate && npm test && npm run build:mcp --prefix ui",
     "release:prepare": "node scripts/set-version.mjs",
     "release:package": "node scripts/package-macos-release.mjs"
   },

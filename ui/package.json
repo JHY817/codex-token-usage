@@ -8,6 +8,7 @@
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "build:mcp": "node scripts/build-mcp-bundle.mjs",
     "preview": "vite preview",
+    "pretest:sites": "npm run build",
     "test:sites": "node --test tests/*.test.mjs"
   },
   "dependencies": {
