@@ -9,16 +9,25 @@ Every release also contains a ZIP for the one-command installer and `SHA256SUMS`
 
 ## Normal release
 
-Start from a clean `main` branch:
+Prepare the version on a release branch:
 
 ```bash
 git pull --rebase
+git switch -c codex/release-0.2.0
 npm run check
 npm run release:prepare -- 0.2.0
 git add .
 git commit -m "release: v0.2.0"
+git push -u origin codex/release-0.2.0
+```
+
+Open and merge a pull request after CI passes. Then tag the exact merged commit from an up-to-date `main` branch:
+
+```bash
+git switch main
+git pull --ff-only
 git tag v0.2.0
-git push origin main --follow-tags
+git push origin v0.2.0
 ```
 
 The tag must exactly match the version in `package.json`. GitHub Actions rejects a mismatch.
@@ -49,7 +58,7 @@ base64 -i AuthKey_KEYID.p8 | pbcopy
 
 Paste each clipboard value directly into its corresponding GitHub secret. Never commit certificates, private keys, passwords, or API keys to the repository.
 
-When all six secrets exist, the workflow signs the bundled Node.js executable and the app, submits the app to Apple with `notarytool`, staples the ticket, and only then creates the DMG and ZIP. If none exist, it publishes an explicitly logged unsigned preview build. A partially configured secret set fails closed.
+When all six secrets exist, the workflow signs the bundled Node.js executable and the app, submits the app to Apple with `notarytool`, staples the ticket, and only then creates the DMG and ZIP. A tagged stable release fails closed when signing secrets are absent or incomplete. A manually dispatched workflow may still produce an explicitly unsigned preview artifact for testing, but it never creates a stable Release.
 
 ## First public release checklist
 
