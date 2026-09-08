@@ -49,6 +49,24 @@ stop_destination_app() {
   [ -z "$PIDS" ] || kill -TERM $PIDS 2>/dev/null || true
 }
 
+server_process_pids() {
+  ps -axo pid=,command= | awk -v script="$DESTINATION_APP/Contents/Resources/server/http.mjs" '
+    {
+      pid = $1
+      $1 = ""
+      sub(/^ /, "", $0)
+      if (index($0, script) > 0) print pid
+    }
+  '
+}
+
+discover_server_url() {
+  for PID in $(server_process_pids); do
+    URL="$(lsof -Pan -p "$PID" -iTCP -sTCP:LISTEN -n 2>/dev/null | awk '/127\.0\.0\.1:[0-9]+ \(LISTEN\)/ { match($0, /127\.0\.0\.1:[0-9]+/); print "http://" substr($0, RSTART, RLENGTH); exit }')"
+    [ -n "$URL" ] && { printf '%s\n' "$URL"; return 0; }
+  done
+}
+
 rollback_install() {
   stop_destination_app
   rm -rf "$DESTINATION_APP"
@@ -82,18 +100,23 @@ if ! open -n "$DESTINATION_APP" --args --install-ready-file "$READY_FILE"; then
   exit 1
 fi
 
+SERVER_URL=""
 WAIT_COUNT=0
-while [ ! -s "$READY_FILE" ] && [ "$WAIT_COUNT" -lt 80 ]; do
-  sleep 0.25
+while [ -z "$SERVER_URL" ] && [ "$WAIT_COUNT" -lt 80 ]; do
+  if [ -s "$READY_FILE" ]; then
+    SERVER_URL="$(sed -n '1p' "$READY_FILE")"
+  fi
+  if [ -z "$SERVER_URL" ]; then
+    SERVER_URL="$(discover_server_url)"
+  fi
+  [ -n "$SERVER_URL" ] || sleep 0.25
   WAIT_COUNT=$((WAIT_COUNT + 1))
 done
-if [ ! -s "$READY_FILE" ]; then
+if [ -z "$SERVER_URL" ]; then
   echo "Installed app did not start its local data service" >&2
   rollback_install
   exit 1
 fi
-
-SERVER_URL="$(sed -n '1p' "$READY_FILE")"
 case "$SERVER_URL" in
   http://127.0.0.1:*) ;;
   *)
