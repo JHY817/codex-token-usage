@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+ui/node_modules/
+dist/
+ui/dist/
+*.log
+*.tgz
+*.zip
+*.dmg
+
+# Local design and acceptance artifacts are intentionally not published.
+design-qa/
+design-qa*.png
+design-qa.md
+reference/
+docs/qa-*/
+docs/REDESIGN-*.png
+docs/REDESIGN-*.md

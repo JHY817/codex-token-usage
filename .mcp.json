@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "codex-token-usage": {
+      "cwd": ".",
+      "command": "node",
+      "args": ["./server/index.mjs"]
+    }
+  }
+}

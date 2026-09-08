@@ -1,0 +1,31 @@
+{
+  "name": "codex-token-usage",
+  "version": "0.1.2",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Local Codex token usage insights with model, effort, conversation, and tool-call attribution.",
+  "scripts": {
+    "build": "npm --prefix ui run build && npm --prefix ui run build:mcp",
+    "start": "node server/index.mjs",
+    "desktop:start": "node server/http.mjs",
+    "refresh": "node server/cli.mjs refresh",
+    "native:build": "npm run build && node scripts/build-macos-app.mjs",
+    "native:install": "npm run native:build && node scripts/install-macos-app.mjs",
+    "native:install:launch": "npm run native:build && node scripts/install-macos-app.mjs --launch",
+    "native:uninstall": "node scripts/uninstall-macos-app.mjs",
+    "scheduler:install": "node scripts/install-scheduler.mjs",
+    "scheduler:uninstall": "node scripts/uninstall-scheduler.mjs",
+    "test:native": "node scripts/test-macos-native.mjs",
+    "test": "node --test server/test/*.test.mjs && npm --prefix ui run test:sites && npm run test:native",
+    "validate": "node scripts/validate-project.mjs",
+    "check": "npm run validate && npm test && npm run build",
+    "release:prepare": "node scripts/set-version.mjs",
+    "release:package": "node scripts/package-macos-release.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.25.76"
+  }
+}
