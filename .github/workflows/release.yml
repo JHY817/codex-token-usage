@@ -94,6 +94,10 @@ jobs:
           xcrun stapler staple "$APP"
           xcrun stapler validate "$APP"
 
+      - name: Reclaim packaging space
+        shell: bash
+        run: rm -rf node_modules ui/node_modules ui/dist .release-runtime
+
       - name: Package DMG and ZIP
         env:
           CODEX_BUILD_ARCH: ${{ matrix.arch }}
