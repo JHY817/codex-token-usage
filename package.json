@@ -25,7 +25,7 @@
     "release:package": "node scripts/package-macos-release.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.0.1",
+    "@modelcontextprotocol/ext-apps": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^3.25.76"
   }
