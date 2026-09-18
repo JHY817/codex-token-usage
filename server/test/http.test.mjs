@@ -89,6 +89,78 @@ test("official credits failure does not discard available quota", async () => {
   } finally { await app.close(); }
 });
 
+test("activity status endpoint is independent from the dashboard snapshot", async () => {
+  let activityCalls = 0;
+  const app = await startUsageHttpServer({
+    port: 0,
+    service: { close() {} },
+    now: () => Date.parse("2026-08-29T10:00:00.000Z"),
+    activityReader: async ({ now }) => {
+      activityCalls += 1;
+      assert.ok(now instanceof Date);
+      return { status: "running", activeSessions: 2, updatedAt: now.toISOString(), source: "test" };
+    },
+  });
+  try {
+    const response = await fetch(`${app.url}/api/activity-status`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      status: "running",
+      activeSessions: 2,
+      updatedAt: "2026-08-29T10:00:00.000Z",
+      source: "test",
+    });
+    assert.equal(activityCalls, 1);
+  } finally { await app.close(); }
+});
+
+test("activity endpoint prefers a connected structured status bridge over the rollout fallback", async () => {
+  let started = 0;
+  let stopped = 0;
+  const app = await startUsageHttpServer({
+    port: 0,
+    service: { close() {} },
+    activityReader: async () => ({
+      status: "running",
+      activeSessions: 1,
+      updatedAt: "2026-08-29T10:00:00.000Z",
+      source: "local-rollout-events",
+    }),
+    statusBridge: {
+      async start() { started += 1; },
+      getSnapshot() {
+        return {
+          available: true,
+          status: "waiting",
+          activeSessions: 2,
+          updatedAt: "2026-08-29T10:00:01.000Z",
+          source: "codex-app-server",
+          bridge: "connected",
+          error: null,
+        };
+      },
+      stop() { stopped += 1; },
+    },
+  });
+  try {
+    const response = await fetch(`${app.url}/api/activity-status`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      available: true,
+      status: "waiting",
+      activeSessions: 2,
+      updatedAt: "2026-08-29T10:00:01.000Z",
+      source: "codex-app-server",
+      bridge: "connected",
+      error: null,
+    });
+    assert.equal(started, 1);
+  } finally {
+    await app.close();
+    assert.equal(stopped, 1);
+  }
+});
+
 test("loopback HTTP host serves dashboard, usage, refresh, and status endpoints", async () => {
   const staticRoot = await mkdtemp(path.join(tmpdir(), "codex-usage-http-"));
   await writeFile(path.join(staticRoot, "index.html"), "<!doctype html><title>usage</title>", "utf8");
@@ -115,6 +187,7 @@ test("loopback HTTP host serves dashboard, usage, refresh, and status endpoints"
     staticRoot,
     service,
     now: () => nowMs,
+    activityReader: async ({ now }) => ({ status: "idle", activeSessions: 0, updatedAt: now.toISOString(), source: "test" }),
     quotaTtlMs: 100,
     quotaReader: async () => {
       quotaCalls += 1;

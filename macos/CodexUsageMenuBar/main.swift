@@ -5,12 +5,18 @@ import SwiftUI
 import WebKit
 
 private let codexBlue = Color(red: 40 / 255.0, green: 102 / 255.0, blue: 247 / 255.0)
+private let activityRunningColor = Color(red: 83 / 255.0, green: 145 / 255.0, blue: 255 / 255.0)
+private let activityWaitingColor = Color(red: 255 / 255.0, green: 194 / 255.0, blue: 55 / 255.0)
+private let activityCompletedColor = Color(red: 47 / 255.0, green: 211 / 255.0, blue: 142 / 255.0)
 private let codexPurple = Color(red: 139 / 255.0, green: 109 / 255.0, blue: 255 / 255.0)
 private let nativeWindowBackground = Color(red: 244 / 255.0, green: 246 / 255.0, blue: 249 / 255.0)
 private let nativeCardBackground = Color.white
 private let nativeInk = Color(red: 32 / 255.0, green: 35 / 255.0, blue: 33 / 255.0)
 private let nativeSeparator = Color.primary.opacity(0.10)
 private let cardWidth: CGFloat = 390
+private let menuBarPercentFontSize: CGFloat = 13
+private let menuBarBadgeSize: CGFloat = 7
+private let dashboardDragStripHeight: CGFloat = 26
 
 struct QuotaWindow: Decodable, Identifiable {
     let limitId: String
@@ -100,6 +106,48 @@ struct StatusEnvelope: Decodable {
     let error: String?
 }
 
+enum ActivityState: String {
+    case idle
+    case running
+    case waiting
+    case completed
+
+    var dotColor: Color? {
+        switch self {
+        case .idle: return nil
+        case .running: return activityRunningColor
+        case .waiting: return activityWaitingColor
+        case .completed: return activityCompletedColor
+        }
+    }
+
+    var dotNSColor: NSColor? {
+        switch self {
+        case .idle: return nil
+        case .running: return NSColor(calibratedRed: 83 / 255.0, green: 145 / 255.0, blue: 255 / 255.0, alpha: 1)
+        case .waiting: return NSColor(calibratedRed: 255 / 255.0, green: 194 / 255.0, blue: 55 / 255.0, alpha: 1)
+        case .completed: return NSColor(calibratedRed: 47 / 255.0, green: 211 / 255.0, blue: 142 / 255.0, alpha: 1)
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .idle: return "没有待处理会话"
+        case .running: return "有 Codex 会话正在执行"
+        case .waiting: return "有 Codex 会话等待确认"
+        case .completed: return "Codex 会话刚刚完成"
+        }
+    }
+}
+
+struct ActivityStatusEnvelope: Decodable {
+    let status: String
+    let activeSessions: Int?
+    let updatedAt: String?
+    let source: String?
+    let error: String?
+}
+
 /// Keeps brand assets independent from the app's current installation path.
 /// The menu bar uses the bundled template so macOS can tint it for either
 /// menu-bar appearance; the popover prefers ChatGPT's official Codex artwork.
@@ -161,6 +209,18 @@ enum CodexIconCatalog {
     }
 }
 
+final class StatusBarActionTarget: NSObject {
+    weak var model: CodexUsageModel?
+
+    init(model: CodexUsageModel) {
+        self.model = model
+    }
+
+    @objc func performClick(_ sender: Any?) {
+        model?.togglePopover()
+    }
+}
+
 final class CodexUsageModel: ObservableObject {
     @Published var quota: QuotaInfo?
     @Published var todayCredits: Double?
@@ -175,6 +235,7 @@ final class CodexUsageModel: ObservableObject {
     @Published var serverURL: URL?
     @Published var menuBarIcon: NSImage?
     @Published var codexIcon: NSImage?
+    @Published var activityState: ActivityState = .idle
 
     private var serverProcess: Process?
     private var serverOutput: String = ""
@@ -186,8 +247,21 @@ final class CodexUsageModel: ObservableObject {
     private var lifecycleObservers: [NSObjectProtocol] = []
     private var lastLifecycleRefreshAt: Date?
     private var dataTask: URLSessionDataTask?
+    private var activityTask: URLSessionDataTask?
+    private var activityTimer: Timer?
+    private var statusBarItem: NSStatusItem?
+    private var statusBarTarget: StatusBarActionTarget?
+    private var popover: NSPopover?
+    private var popoverLocalMonitor: Any?
+    private var popoverGlobalMonitor: Any?
+    private var dashboardWindow: NSWindow?
     private let isoFormatter = ISO8601DateFormatter()
     private let quotaRetryDelays: [TimeInterval] = [5, 10, 20, 30, 60]
+    // URLSession cancellation is advisory: a cancelled response can still
+    // arrive after the next poll. Keep a monotonic generation so an older
+    // completed response can never overwrite a newer running response.
+    private var activityRequestGeneration = 0
+    private var latestActivityUpdatedAt: Date?
 
     init() {
         menuBarIcon = CodexIconCatalog.loadMenuBarIcon()
@@ -200,11 +274,13 @@ final class CodexUsageModel: ObservableObject {
             self?.stopServer()
         }
         installLifecycleObservers()
+        installNativeStatusItem()
         startServer()
     }
 
     deinit {
         stopServer()
+        removeNativeStatusItem()
         if let terminationObserver {
             NotificationCenter.default.removeObserver(terminationObserver)
         }
@@ -303,6 +379,7 @@ final class CodexUsageModel: ObservableObject {
                     } else {
                         self.statusMessage = "本地数据已同步，额度暂不可用"
                     }
+                    self.updateNativeStatusItem()
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -315,6 +392,178 @@ final class CodexUsageModel: ObservableObject {
         dataTask?.resume()
     }
 
+    func refreshActivityStatus() {
+        guard let serverURL else { return }
+        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)
+        components?.path = "/api/activity-status"
+        guard let url = components?.url else { return }
+
+        activityRequestGeneration += 1
+        let requestGeneration = activityRequestGeneration
+        activityTask?.cancel()
+        activityTask = URLSession.shared.dataTask(with: url) { [weak self] data, response, _ in
+            guard let self,
+                  let data,
+                  let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  let payload = try? JSONDecoder().decode(ActivityStatusEnvelope.self, from: data),
+                  let rawState = ActivityState(rawValue: payload.status) else { return }
+            // A server response that says "completed" while still reporting
+            // active sessions is internally inconsistent. Active work wins;
+            // otherwise a late green response can hide a live task.
+            let state: ActivityState
+            if (payload.activeSessions ?? 0) > 0 {
+                state = rawState == .waiting ? .waiting : .running
+            } else {
+                state = rawState
+            }
+            let updatedAt = payload.updatedAt.flatMap { self.isoFormatter.date(from: $0) }
+            DispatchQueue.main.async {
+                guard self.activityRequestGeneration == requestGeneration else { return }
+                if let updatedAt,
+                   let latestActivityUpdatedAt = self.latestActivityUpdatedAt,
+                   updatedAt < latestActivityUpdatedAt {
+                    return
+                }
+                if let updatedAt { self.latestActivityUpdatedAt = updatedAt }
+                self.activityState = state
+                self.updateNativeStatusItem()
+            }
+        }
+        activityTask?.resume()
+    }
+
+    private func installNativeStatusItem() {
+        guard statusBarItem == nil else { return }
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusBarItem = item
+        statusBarTarget = StatusBarActionTarget(model: self)
+        item.button?.target = statusBarTarget
+        item.button?.action = #selector(StatusBarActionTarget.performClick(_:))
+        item.button?.imagePosition = .imageLeading
+        item.button?.imageScaling = .scaleProportionallyDown
+
+        let popover = NSPopover()
+        // Match the native menu-bar interaction: clicking outside the summary
+        // panel dismisses it, while clicking the same status item toggles it.
+        // Opening the dashboard also closes it explicitly before navigation.
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentSize = NSSize(width: cardWidth, height: 610)
+        popover.contentViewController = NSHostingController(rootView: QuotaPopoverView(model: self))
+        self.popover = popover
+        installPopoverEventMonitors()
+        updateNativeStatusItem()
+    }
+
+    private func removeNativeStatusItem() {
+        removePopoverEventMonitors()
+        popover?.performClose(nil)
+        popover = nil
+        statusBarTarget = nil
+        if let item = statusBarItem {
+            NSStatusBar.system.removeStatusItem(item)
+        }
+        statusBarItem = nil
+    }
+
+    /// NSPopover's transient behavior is the default guard, but an explicit
+    /// monitor is needed for clicks delivered to another application while the
+    /// menu-bar host remains an accessory app. Keep the status-item click out
+    /// of this path so the same button still acts as a reliable toggle.
+    private func installPopoverEventMonitors() {
+        removePopoverEventMonitors()
+        let mouseDownMask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
+        popoverLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseDownMask) { [weak self] event in
+            self?.closePopoverIfOutside(event)
+            return event
+        }
+        popoverGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseDownMask) { [weak self] event in
+            self?.closePopoverIfOutside(event)
+        }
+    }
+
+    private func removePopoverEventMonitors() {
+        if let popoverLocalMonitor {
+            NSEvent.removeMonitor(popoverLocalMonitor)
+        }
+        if let popoverGlobalMonitor {
+            NSEvent.removeMonitor(popoverGlobalMonitor)
+        }
+        popoverLocalMonitor = nil
+        popoverGlobalMonitor = nil
+    }
+
+    private func closePopoverIfOutside(_ event: NSEvent) {
+        guard let popover, popover.isShown else { return }
+        let screenPoint: NSPoint
+        if let eventWindow = event.window {
+            screenPoint = eventWindow.convertPoint(toScreen: event.locationInWindow)
+        } else {
+            screenPoint = NSEvent.mouseLocation
+        }
+        if let statusButton = statusBarItem?.button,
+           let statusButtonWindow = statusButton.window {
+            let buttonRectInWindow = statusButton.superview?.convert(statusButton.frame, to: nil)
+                ?? statusButton.frame
+            let buttonRectOnScreen = statusButtonWindow.convertToScreen(buttonRectInWindow)
+            if buttonRectOnScreen.contains(screenPoint) { return }
+        }
+        guard let popoverWindow = popover.contentViewController?.view.window,
+              !popoverWindow.frame.contains(screenPoint) else { return }
+        popover.performClose(nil)
+    }
+
+    private func updateNativeStatusItem() {
+        guard let button = statusBarItem?.button else { return }
+        button.image = StatusBarIconImage.make(
+            state: activityState,
+            baseImage: menuBarIcon,
+            appearance: button.effectiveAppearance
+        )
+        let percent = remainingPercent.map { "\(Int($0.rounded()))%" } ?? "--"
+        let color = NSColor.labelColor
+        button.attributedTitle = NSAttributedString(
+            string: percent,
+            attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: menuBarPercentFontSize, weight: .medium),
+                .foregroundColor: color,
+            ]
+        )
+        button.toolTip = "\(activityState.accessibilityLabel)，Codex 剩余额度 \(percent)"
+    }
+
+    func togglePopover() {
+        guard let popover, let button = statusBarItem?.button else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    func closePopover() {
+        popover?.performClose(nil)
+    }
+
+    func openDashboardWindow() {
+        closePopover()
+        if let existing = DashboardWindowPresenter.window(in: NSApp.windows) {
+            DashboardWindowPresenter.bringToFront(existing)
+            return
+        }
+
+        let hostingController = NSHostingController(rootView: DashboardWindowView(model: self))
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = DashboardWindowPresenter.windowTitle
+        window.setContentSize(NSSize(width: 1060, height: 930))
+        DashboardWindowPresenter.configure(window)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow = window
+    }
+
     func stopServer() {
         refreshTimer?.invalidate()
         refreshTimer = nil
@@ -323,6 +572,10 @@ final class CodexUsageModel: ObservableObject {
         quotaRetryAttempt = 0
         dataTask?.cancel()
         dataTask = nil
+        activityTask?.cancel()
+        activityTask = nil
+        activityTimer?.invalidate()
+        activityTimer = nil
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         outputPipe = nil
         if let serverProcess, serverProcess.isRunning {
@@ -464,6 +717,10 @@ final class CodexUsageModel: ObservableObject {
             refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
                 self?.refresh(force: true)
             }
+            activityTimer?.invalidate()
+            activityTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+                self?.refreshActivityStatus()
+            }
         } catch {
             statusMessage = "无法启动本地服务"
             lastError = error.localizedDescription
@@ -487,6 +744,7 @@ final class CodexUsageModel: ObservableObject {
             serverURL = url
             statusMessage = "正在同步本地数据…"
             refresh()
+            refreshActivityStatus()
         }
     }
 
@@ -612,9 +870,47 @@ struct StatusBarLabel: View {
         }
         .padding(.horizontal, 2)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(model.remainingPercent.map {
+        .accessibilityLabel("\(model.activityState.accessibilityLabel)，" + (model.remainingPercent.map {
             "Codex 剩余额度 \(Int($0.rounded()))%"
-        } ?? "Codex 额度不可用")
+        } ?? "Codex 额度不可用"))
+    }
+}
+
+enum StatusBarIconImage {
+    static func make(state: ActivityState, baseImage: NSImage?, appearance: NSAppearance) -> NSImage? {
+        guard let baseImage,
+              let mask = baseImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+
+        // Keep the status point in the same horizontal rhythm as Codex:
+        // icon, centered point, percentage. It gets its own lane instead of
+        // painting over the Codex mark, while both elements share a centerline.
+        let size = NSSize(width: 29, height: 22)
+        let baseRect = NSRect(x: 0, y: 2, width: 18, height: 18)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        let context = NSGraphicsContext.current?.cgContext
+        context?.saveGState()
+        context?.clip(to: baseRect, mask: mask)
+        appearance.performAsCurrentDrawingAppearance {
+            NSColor.labelColor.setFill()
+            baseRect.fill()
+        }
+        context?.restoreGState()
+
+        if let badgeColor = state.dotNSColor {
+            badgeColor.setFill()
+            NSBezierPath(ovalIn: NSRect(
+                x: baseRect.maxX + 2,
+                y: baseRect.midY - (menuBarBadgeSize / 2),
+                width: menuBarBadgeSize,
+                height: menuBarBadgeSize
+            )).fill()
+        }
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
     }
 }
 
@@ -846,8 +1142,6 @@ struct SummaryMetric: View {
 
 struct QuotaPopoverView: View {
     @ObservedObject var model: CodexUsageModel
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismiss) private var dismiss
     @State private var isRefreshHovered = false
     @State private var isDetailHovered = false
 
@@ -944,10 +1238,7 @@ struct QuotaPopoverView: View {
                 Spacer()
 
                 Button {
-                    DashboardWindowPresenter.openFromPopover(
-                        dismissPopover: { dismiss() },
-                        openWindow: { openWindow(id: DashboardWindowPresenter.sceneID) }
-                    )
+                    model.openDashboardWindow()
                 } label: {
                     Text("打开详情")
                 }
@@ -1270,31 +1561,56 @@ struct DashboardWindowView: View {
             NativeWindowConfigurator()
                 .allowsHitTesting(false)
 
-            Group {
-                if let serverURL = model.serverURL {
-                    DashboardWebView(url: serverURL)
-                } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text(model.statusMessage)
-                            .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                // Reserve a native, empty top row so dashboard content never
+                // scrolls underneath the traffic-light controls. The row is
+                // also the window drag hot zone.
+                Color.clear
+                    .frame(height: dashboardDragStripHeight)
+
+                Group {
+                    if let serverURL = model.serverURL {
+                        DashboardWebView(url: serverURL)
+                    } else {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text(model.statusMessage)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            // Cover the native 60px top bar, but start past the traffic lights
-            // and end before the centered web navigation controls.
-            NativeWindowDragRegion()
-                .frame(width: 320, height: 60)
-                .offset(x: 84, y: 0)
+            // Keep the traffic lights clickable while making the rest of the
+            // reserved row a reliable native drag surface.
+            HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: 84)
+                    .allowsHitTesting(false)
+                NativeWindowDragRegion()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: dashboardDragStripHeight, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(nativeWindowBackground)
         // The AppKit window is configured with fullSizeContentView. Ignore
-        // SwiftUI's title-bar safe-area inset so the web topbar shares the
-        // same row as the real traffic-light controls.
+        // SwiftUI's title-bar safe-area inset so the reserved drag row starts
+        // at the physical top of the window.
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 980, minHeight: 760)
+    }
+}
+
+/// The dashboard is an auxiliary window of a menu-bar application. Closing
+/// it must not terminate the process or remove the status item; the menu-bar
+/// summary remains the primary entry point after the window is dismissed.
+final class CodexUsageAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 }
 
@@ -1319,17 +1635,10 @@ struct QAWindowBootstrap: View {
 
 @main
 struct CodexUsageMenuBarApp: App {
+    @NSApplicationDelegateAdaptor(CodexUsageAppDelegate.self) private var appDelegate
     @StateObject private var model = CodexUsageModel()
 
     var body: some Scene {
-        MenuBarExtra {
-            QuotaPopoverView(model: model)
-        } label: {
-            StatusBarLabel(model: model)
-                .background(QAWindowBootstrap())
-        }
-        .menuBarExtraStyle(.window)
-
         Window("Codex Token Usage", id: "dashboard") {
             DashboardWindowView(model: model)
         }

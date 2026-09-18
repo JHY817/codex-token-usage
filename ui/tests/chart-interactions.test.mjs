@@ -356,3 +356,28 @@ test("compacts an oversized model summary without changing its source list", () 
   assert.equal(compacted.at(-1).share, 60);
   assert.equal(models.length, 7);
 });
+
+test("shows the six highest-use models first and expands the rest on demand", () => {
+  const models = [
+    { id: "m3", tokens: 300 },
+    { id: "m1", tokens: 700 },
+    { id: "m7", tokens: 100 },
+    { id: "m2", tokens: 600 },
+    { id: "m6", tokens: 200 },
+    { id: "m4", tokens: 400 },
+    { id: "m5", tokens: 500 },
+    { id: "m8", tokens: 50 },
+  ];
+  assert.deepEqual(
+    dashboardUi.rankModelBreakdownModels(models).map((model) => model.id),
+    ["m1", "m2", "m5", "m4", "m3", "m6", "m7", "m8"],
+  );
+  assert.deepEqual(
+    dashboardUi.visibleModelBreakdownModels(models).map((model) => model.id),
+    ["m1", "m2", "m5", "m4", "m3", "m6"],
+  );
+  assert.deepEqual(
+    dashboardUi.visibleModelBreakdownModels(models, true).map((model) => model.id),
+    ["m1", "m2", "m5", "m4", "m3", "m6", "m7", "m8"],
+  );
+});

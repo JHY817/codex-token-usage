@@ -543,6 +543,28 @@ button:focus-visible {
   transition: opacity 150ms ease;
 }
 
+.show-more-models {
+  width: 100%;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 6px 0 2px;
+  border: 0;
+  border-top: 1px solid rgba(125, 141, 166, 0.14);
+  color: #2866f7;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.show-more-models:hover { background: rgba(40, 102, 247, 0.045); }
+.show-more-models svg { transition: transform 150ms ease; }
+.show-more-models.is-expanded svg { transform: rotate(180deg); }
+
 .model-item.is-muted { opacity: 0.3; }
 
 .model-item-head {
