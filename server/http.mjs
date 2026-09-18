@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { readQuota } from "./quota.mjs";
 import { UsageService } from "./service.mjs";
 import { readCreditsSummary } from "./credits.mjs";
+import { readActivityStatus } from "./activity.mjs";
+import { createStatusBridge, mergeActivityStatus } from "./status-bridge.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VALID_RANGES = new Set(["today", "7d", "30d", "all"]);
@@ -295,6 +297,8 @@ export function createUsageHttpServer({
   service = new UsageService(),
   quotaReader = readQuota,
   creditsReader = readCreditsSummary,
+  activityReader = readActivityStatus,
+  statusBridge = createStatusBridge(),
   staticRoot = process.env.CODEX_USAGE_UI_ROOT ?? path.join(ROOT, "ui", "dist", "client"),
   quotaTtlMs = durationOption(process.env.CODEX_USAGE_QUOTA_TTL_MS, DEFAULT_QUOTA_TTL_MS),
   quotaUnavailableTtlMs = durationOption(
@@ -308,6 +312,11 @@ export function createUsageHttpServer({
   let statusDashboard = null;
   let statusPromise = null;
   let closed = false;
+
+  // The bridge is optional. When the desktop host does not expose its
+  // app-server socket, it stays dormant and the rollout scanner remains the
+  // source of truth instead of creating a second Codex runtime.
+  void statusBridge?.start?.();
 
   async function getQuotaCached(force = false) {
     const cacheTtlMs = quotaCache?.value?.available === true
@@ -351,7 +360,28 @@ export function createUsageHttpServer({
     return statusPromise;
   }
 
+  async function getActivityStatus() {
+    let localActivity;
+    try {
+      localActivity = await activityReader({ now: new Date(now()) });
+    } catch (error) {
+      localActivity = {
+        status: "idle",
+        activeSessions: 0,
+        updatedAt: null,
+        source: "local-rollout-events",
+        error: errorMessage(error, "活动状态读取失败"),
+      };
+    }
+    const bridgeActivity = statusBridge?.getSnapshot?.({ now: new Date(now()) });
+    return mergeActivityStatus(localActivity, bridgeActivity);
+  }
+
   async function handleApi(request, response, url) {
+    if (url.pathname === "/api/activity-status" && request.method === "GET") {
+      sendJson(response, 200, await getActivityStatus());
+      return;
+    }
     if (url.pathname === "/api/official-usage" && request.method === "GET") {
       const range = requestedRange(url);
       if (!range) { sendJson(response, 400, { error: "range 必须是 today、7d、30d 或 all" }); return; }
@@ -493,6 +523,7 @@ export function createUsageHttpServer({
       } catch {
         // Closing an already-closed server is safe for callers during app exit.
       }
+      statusBridge?.stop?.();
       if (service && typeof service.close === "function") service.close();
     },
   };

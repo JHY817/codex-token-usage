@@ -117,7 +117,7 @@ async function run() {
 
   const serverResource = path.join(resourcesRoot, "server");
   await mkdir(serverResource, { recursive: true });
-  for (const file of ["http.mjs", "quota.mjs", "credits.mjs", "service.mjs", "store.mjs", "usage.mjs", "labels.mjs"]) {
+  for (const file of ["http.mjs", "activity.mjs", "status-bridge.mjs", "quota.mjs", "credits.mjs", "service.mjs", "store.mjs", "usage.mjs", "labels.mjs"]) {
     await cp(path.join(projectRoot, "server", file), path.join(serverResource, file));
   }
   await cp(path.join(projectRoot, "ui", "dist", "client"), path.join(resourcesRoot, "ui", "dist", "client"), { recursive: true });

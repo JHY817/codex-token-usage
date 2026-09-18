@@ -419,8 +419,11 @@ export function comparisonBarStyle(value, maximum) {
   };
 }
 
-const CHART_PLOT = Object.freeze({ left: 44, right: 12, top: 18, bottom: 48 });
+// Leave enough room for the widest y-axis label (for example `80,000`) so it
+// does not sit flush against the card edge on the 7-day and 30-day views.
+const CHART_PLOT = Object.freeze({ left: 58, right: 12, top: 18, bottom: 48 });
 const MODEL_PALETTE = ["#2866F7", "#8B6DFF", "#4A9AF4", "#B27CF5", "#38AE93", "#E29A49"];
+const MODEL_BREAKDOWN_DEFAULT_VISIBLE = 6;
 
 function chartPointKey(point) {
   return `${typeof point?.x}:${String(point?.x)}`;
@@ -1026,9 +1029,38 @@ export function compactModelBreakdownModels(models, maxVisible = 5) {
   ];
 }
 
+export function rankModelBreakdownModels(models = []) {
+  return (Array.isArray(models) ? models : [])
+    .map((model, index) => ({ model, index }))
+    .sort((first, second) => (
+      numericValue(second.model?.tokens) - numericValue(first.model?.tokens)
+      || first.index - second.index
+    ))
+    .map(({ model }) => model);
+}
+
+export function visibleModelBreakdownModels(models = [], expanded = false, maxVisible = MODEL_BREAKDOWN_DEFAULT_VISIBLE) {
+  const ranked = rankModelBreakdownModels(models);
+  if (expanded) return ranked;
+  return ranked.slice(0, Math.max(1, maxVisible));
+}
+
 function ModelBreakdown({ models, loading, metric = "tokens" }) {
   const visibleModels = useMemo(() => models.filter((model) => model.tokens > 0), [models]);
+  const [showAllModels, setShowAllModels] = useState(false);
+  const modelKey = useMemo(() => visibleModels.map((model) => model.id).join("\u0001"), [visibleModels]);
+  const rankedModels = useMemo(() => rankModelBreakdownModels(visibleModels), [visibleModels]);
+  const displayedModels = useMemo(
+    () => visibleModelBreakdownModels(rankedModels, showAllModels),
+    [rankedModels, showAllModels],
+  );
+  const hiddenModelCount = Math.max(0, rankedModels.length - displayedModels.length);
   const maximumTokens = Math.max(1, ...visibleModels.map((model) => model.tokens));
+
+  useEffect(() => {
+    setShowAllModels(false);
+  }, [metric, modelKey]);
+
   return (
     <aside className="model-breakdown" aria-labelledby="model-breakdown-title">
       <div className="panel-kicker">按 {metricUnit(metric)} 用量</div>
@@ -1037,7 +1069,7 @@ function ModelBreakdown({ models, loading, metric = "tokens" }) {
         <div className="model-empty">{loading ? "正在归并模型…" : "当前周期暂无模型数据"}</div>
       ) : (
         <div className="model-list">
-          {visibleModels.map((model) => (
+          {displayedModels.map((model) => (
             <button
               type="button"
               className={`model-item ${model.isMuted ? "is-muted" : ""}`}
@@ -1059,6 +1091,17 @@ function ModelBreakdown({ models, loading, metric = "tokens" }) {
             </button>
           ))}
         </div>
+      )}
+      {rankedModels.length > MODEL_BREAKDOWN_DEFAULT_VISIBLE && (
+        <button
+          type="button"
+          className={`show-more-models${showAllModels ? " is-expanded" : ""}`}
+          onClick={() => setShowAllModels((expanded) => !expanded)}
+          aria-expanded={showAllModels}
+        >
+          {showAllModels ? "收起模型" : `查看更多（还有 ${hiddenModelCount} 个）`}
+          <CaretDown size={14} weight="bold" aria-hidden="true" />
+        </button>
       )}
     </aside>
   );
@@ -1246,7 +1289,13 @@ function DetailDialog({ conversation, detail, loading, error, onClose }) {
     : numericValue(row.cumulativeTokens)), 0);
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         ref={dialogRef}
         className="detail-dialog"
